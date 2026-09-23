@@ -1,0 +1,114 @@
+name: Build Linux ARM64
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+env:
+  RELEASE_TAG: ${{ github.event.release.tag_name }}
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Enable ARM64 emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build ARM64 packages
+        env:
+          OCS_PATREON_TOKEN: ${{ secrets.OCS_PATREON_TOKEN }}
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -e OCS_PATREON_TOKEN \
+            -e RELEASE_TAG \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            rust:1-bookworm \
+            bash -euxo pipefail -c '
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev \
+                libxkbcommon-dev libwayland-dev libfontconfig1-dev libfreetype6-dev \
+                librsvg2-bin pkg-config wget
+              cargo build --locked --release
+
+              version="${RELEASE_TAG#v}"
+              version="${version:-manual}"
+              prefix="OpenCADStudio-${RELEASE_TAG:-manual}-linux-aarch64"
+
+              mkdir -p AppDir/usr/bin AppDir/usr/share/applications \
+                AppDir/usr/share/icons/hicolor/256x256/apps AppDir/usr/share/metainfo
+              cp target/release/OpenCADStudio AppDir/usr/bin/OpenCADStudio
+              cp packaging/OpenCADStudio.desktop \
+                AppDir/usr/share/applications/io.github.HakanSeven12.OpenCadStudio.desktop
+              cp packaging/io.github.HakanSeven12.OpenCadStudio.metainfo.xml \
+                AppDir/usr/share/metainfo/
+              rsvg-convert -w 256 -h 256 assets/logo.svg \
+                -o AppDir/usr/share/icons/hicolor/256x256/apps/io.github.HakanSeven12.OpenCadStudio.png
+
+              tar -C target/release -czf "${prefix}.tar.gz" OpenCADStudio
+
+              mkdir -p DebRoot/usr/bin DebRoot/usr/share/applications \
+                DebRoot/usr/share/icons/hicolor/256x256/apps DebRoot/usr/share/metainfo \
+                DebRoot/DEBIAN
+              cp AppDir/usr/bin/OpenCADStudio DebRoot/usr/bin/
+              cp AppDir/usr/share/applications/io.github.HakanSeven12.OpenCadStudio.desktop \
+                DebRoot/usr/share/applications/
+              cp AppDir/usr/share/icons/hicolor/256x256/apps/io.github.HakanSeven12.OpenCadStudio.png \
+                DebRoot/usr/share/icons/hicolor/256x256/apps/
+              cp AppDir/usr/share/metainfo/io.github.HakanSeven12.OpenCadStudio.metainfo.xml \
+                DebRoot/usr/share/metainfo/
+              printf "%s\n" \
+                "Package: opencadstudio" \
+                "Version: ${version}" \
+                "Section: graphics" \
+                "Priority: optional" \
+                "Architecture: arm64" \
+                "Maintainer: OpenCADStudio contributors" \
+                "Depends: libc6, libgl1, libx11-6, libxcursor1, libxi6, libxrandr2, libxkbcommon0, libwayland-client0, libfontconfig1, libfreetype6" \
+                "Description: 2D/3D CAD application for DWG and DXF drawings" \
+                > DebRoot/DEBIAN/control
+              dpkg-deb --build --root-owner-group DebRoot "${prefix}.deb"
+
+              wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-aarch64.AppImage
+              chmod +x linuxdeploy-aarch64.AppImage
+              APPIMAGE_EXTRACT_AND_RUN=1 ./linuxdeploy-aarch64.AppImage \
+                --appdir AppDir \
+                --desktop-file AppDir/usr/share/applications/io.github.HakanSeven12.OpenCadStudio.desktop \
+                --icon-file AppDir/usr/share/icons/hicolor/256x256/apps/io.github.HakanSeven12.OpenCadStudio.png \
+                --output appimage
+              mv Open*CAD*Studio*.AppImage "${prefix}.AppImage"
+            '
+
+      - name: Upload ARM64 packages to release
+        if: env.RELEASE_TAG != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            "OpenCADStudio-${RELEASE_TAG}-linux-aarch64.tar.gz" \
+            "OpenCADStudio-${RELEASE_TAG}-linux-aarch64.deb" \
+            "OpenCADStudio-${RELEASE_TAG}-linux-aarch64.AppImage" \
+            --clobber \
+            --repo "$GITHUB_REPOSITORY"
+
+      - name: Upload ARM64 packages as workflow artifacts
+        if: env.RELEASE_TAG == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenCADStudio-linux-aarch64
+          path: OpenCADStudio-manual-linux-aarch64.*
+          if-no-files-found: error
+          retention-days: 7
