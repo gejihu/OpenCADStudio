@@ -30,7 +30,7 @@ jobs:
         env:
           OCS_PATREON_TOKEN: ${{ secrets.OCS_PATREON_TOKEN }}
         run: |
-          docker run --rm --platform linux/arm64 \
+          docker run --rm --privileged --platform linux/arm64 \
             -e OCS_PATREON_TOKEN \
             -e RELEASE_TAG \
             -v "$GITHUB_WORKSPACE:/workspace" \
@@ -41,7 +41,7 @@ jobs:
               apt-get install -y --no-install-recommends \
                 libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev \
                 libxkbcommon-dev libwayland-dev libfontconfig1-dev libfreetype6-dev \
-                librsvg2-bin pkg-config wget
+                librsvg2-bin pkg-config wget fuse3 libfuse2
               cargo build --locked --release
 
               version="${RELEASE_TAG#v}"
