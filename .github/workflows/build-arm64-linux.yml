@@ -45,7 +45,7 @@ jobs:
               cargo build --locked --release
 
               version="${RELEASE_TAG#v}"
-              version="${version:-manual}"
+              version="${version:-0.0.0}"
               prefix="OpenCADStudio-${RELEASE_TAG:-manual}-linux-aarch64"
 
               mkdir -p AppDir/usr/bin AppDir/usr/share/applications \
