@@ -164,6 +164,11 @@ fn default_map() -> FxHashMap<String, String> {
     parse_pgp(DEFAULT_ALIASES_PGP)
 }
 
+#[cfg(test)]
+pub(super) fn default_aliases_for_test() -> FxHashMap<String, String> {
+    default_map()
+}
+
 /// Sorted factory-default rows for the ALIASEDIT reset action.
 pub(super) fn default_alias_rows() -> Vec<(String, String)> {
     let mut rows: Vec<(String, String)> = default_map().into_iter().collect();

@@ -4428,6 +4428,10 @@ impl OpenCADStudio {
     #[cfg(test)]
     pub(crate) fn new_for_test() -> Self {
         let mut app = Self::new();
+        // Tests must not share the user's mutable alias file. Parallel tests
+        // that edit aliases could otherwise make command dispatch order-dependent.
+        app.command_aliases = alias::default_aliases_for_test();
+        app.command_line.command_aliases = app.command_aliases.clone();
         // `new` loads the real settings file, so without this every test runs
         // against whatever the developer last set in the application — a suite
         // that passes on a clean machine and fails on a used one. It surfaced
